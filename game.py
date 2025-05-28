@@ -1,5 +1,5 @@
 #space-arrivers -- um jogo platformer 
-from random import choice
+from random import choice, randint, choices
 from math import floor
 import pgzrun
 
@@ -12,7 +12,7 @@ HEIGHT = 500
 BG_COLOR = (147, 246, 255)
 
 #music
-currentVolume = 0.2     #! change later
+currentVolume = 0.0     #! change later
 music.set_volume(currentVolume)
 music.play("menu") #menu, initial theme
 
@@ -37,10 +37,10 @@ characterTiles: dict = {
     "friend_1": "friend_0001",
     
     #bad
-    "enemy1_1": "enemy_0000",
-    "enemy1_2": "enemy_0001",
-    "enemy2_1": "enemy_0002",
-    "enemy2_2": "enemy_0003"
+    "enemy1_0": "enemy_0000",
+    "enemy1_1": "enemy_0001",
+    "enemy2_0": "enemy_0002",
+    "enemy2_1": "enemy_0003"
 }
 
 #for text
@@ -48,24 +48,42 @@ defaultShadow = (0.5, 0.5) #shadow= arg
 
 #initial states
 hero = Actor(characterTiles["hero_0"])
-hero.topleft = (WIDTH // 2, GROUND_HEIGHT - 24)
-hero.fps = 2
+hero.topleft = (WIDTH // 2, GROUND_HEIGHT - 30)
+hero.lifes = 5
+hero.points = 0 # 20: bronze, 50: silver, 100: gold!, 150: platinum!
 
-enemys: list['Actor'] = []
+NPCs: list['Actor'] = []
 
-#gravity
+#movement and gravity measures
 heroMovementVelocity = 3
 heroVerticalVelocity = 0
 gravityAceleration = 0.3
 jumpAcceleration = -13
 
+#npcs
+npcMovementVelocitys = [1, 1.5, 2, 3, 5] 
 
 #* Actions & Main
-def generateRandomEnemy():
-    randEnemyChoice = choice(['enemy1', 'enemy2', ''])
-    newEnemy = Actor(randEnemyChoice)
+def generateRandomChar():
+    randCharChoice = str(choices(
+        ['enemy1', 'enemy2', 'friend'], 
+        weights=(0.4, 0.4, 0.2)
+    )[0])
+    newChar = Actor(characterTiles[randCharChoice + '_0'])
+    newChar.topleft = (randint(30, WIDTH - 30), GROUND_HEIGHT - 24)
+
+    NPCs.append(newChar)
+
+clock.schedule_unique(generateRandomChar, 0)
+clock.schedule_unique(generateRandomChar, 0)
+clock.schedule_unique(generateRandomChar, 0)
+
+clock.schedule_unique(generateRandomChar, 2) 
+clock.schedule_unique(generateRandomChar, 5)
+clock.schedule_interval(generateRandomChar, randint(8,12))
 
 def alternateHeroPoses():
+    #Hero animations
     if floor(hero.y) < TOP_GROUND_HEIGHT: #floating
         hero.image = characterTiles["hero_0"]
     elif hero.image == characterTiles["hero_0"]:
@@ -73,9 +91,21 @@ def alternateHeroPoses():
     elif hero.image == characterTiles["hero_1"]:
         hero.image = characterTiles["hero_0"]
 
-clock.schedule_interval(alternateHeroPoses, 0.6)
+def alternateNPCPoses():
+    for npc in NPCs:
+        #could be better using 'from itertools import cycle...'
+        if 'friend' in npc.image:
+            npc.image = characterTiles["friend_1"] if npc.image == characterTiles["friend_0"] else characterTiles["friend_0"]
+        if 'enemy' in npc.image:
+            if 'enemy1':
+                npc.image = characterTiles["enemy1_1"] if npc.image == characterTiles["enemy1_0"] else characterTiles["enemy1_0"]
+            elif 'enemy2':
+                npc.image = characterTiles["enemy2_1"] if npc.image == characterTiles["enemy2_0"] else characterTiles["enemy2_0"]
 
-def alternateEnemyPosed(): ...
+def scheduleCharacterAnimations():
+    print("animations scheduled!")
+    clock.schedule_interval(alternateHeroPoses, 0.6)
+    clock.schedule_interval(alternateNPCPoses, 1)
 
 def draw(): #place in screen
     screen.fill(BG_COLOR) 
@@ -99,6 +129,9 @@ def draw(): #place in screen
 
     #drawing objects
     hero.draw()
+
+    for npc in NPCs:
+        npc.draw()
     
     #drawing debug info
     screen.draw.text("y: " + str(hero.y), (0,0), shadow=defaultShadow)
@@ -140,7 +173,54 @@ def update(): #process
     elif hero.x < 10:
         hero.x = 10
 
-#other bindings
+    #NPC logic
+    for npc in NPCs:
+        #assigning a speed
+        if not hasattr(npc, "speed"):
+            if 'enemy' in npc.image:
+                npc.speed = float(choices(
+                    npcMovementVelocitys,
+                    weights=(1, 2, 3, 2, 1)    
+                )[0])
+            elif 'friend' in npc.image:
+                npc.speed = choice(npcMovementVelocitys[:1])
+
+        #assinging a direction
+        directions = ['left', 'right']
+        if not hasattr(npc, "direction"):
+            if npc.x > WIDTH // 2:
+                npc.direction = directions[0]
+            if npc.x < WIDTH // 2:
+                npc.direction = directions[1]
+
+            print(f"spawned one {'Enemy' if 'enemy' in npc.image else 'Friend'} going {npc.direction}, at initial speed {npc.speed}")
+
+        #movement
+        match(npc.direction):
+            case 'left':
+                npc.x -= npc.speed
+            case 'right':
+                npc.x += npc.speed
+
+        #only enemy will bounce in walls
+        if 'enemy' in npc.image:
+            lastDirection: str = npc.direction
+            randVelocityModifier = int(choices(
+                (-1, 1, 2), 
+                weights=(0.4, 0.5, 0.1)
+            )[0])
+            
+            #apply only on bounce event
+            if npc.x <= 10:
+                npc.direction = directions[1]
+                npc.speed += randVelocityModifier
+            elif npc.x >= WIDTH - 10:
+                npc.direction = directions[0]
+                npc.speed += randVelocityModifier
+
+            if not npc.direction == lastDirection: print(f"{npc.image} changed direction to: {npc.direction}, at speed {npc.speed}")
+
+#more bindings
 def on_key_down(key):
     global currentVolume
 
@@ -158,5 +238,6 @@ def on_key_down(key):
                 currentVolume -= 0.1
                 music.set_volume(currentVolume)
 
+scheduleCharacterAnimations()
 
 pgzrun.go()
