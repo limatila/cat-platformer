@@ -93,14 +93,11 @@ def alternateHeroPoses():
 
 def alternateNPCPoses():
     for npc in NPCs:
-        #could be better using 'from itertools import cycle...'
-        if 'friend' in npc.image:
-            npc.image = characterTiles["friend_1"] if npc.image == characterTiles["friend_0"] else characterTiles["friend_0"]
-        if 'enemy' in npc.image:
-            if 'enemy1':
-                npc.image = characterTiles["enemy1_1"] if npc.image == characterTiles["enemy1_0"] else characterTiles["enemy1_0"]
-            elif 'enemy2':
-                npc.image = characterTiles["enemy2_1"] if npc.image == characterTiles["enemy2_0"] else characterTiles["enemy2_0"]
+        base_image = npc.image[:-1]  #enemy1_, friend_
+        if npc.image.endswith("0"):
+            npc.image = base_image + "1"
+        elif npc.image.endswith("1"):
+            npc.image = base_image + "0"
 
 def scheduleCharacterAnimations():
     print("animations scheduled!")
