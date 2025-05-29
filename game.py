@@ -62,8 +62,10 @@ jumpAcceleration = -13
 
 #npcs
 npcMovementVelocitys = [1, 1.5, 2, 3, 5] 
+NPCDirections = ['left', 'right']
 
 #* Actions & Main
+#npc generation
 def generateRandomChar():
     randCharChoice = str(choices(
         ['enemy1', 'enemy2', 'friend'], 
@@ -74,35 +76,86 @@ def generateRandomChar():
 
     NPCs.append(newChar)
 
-clock.schedule_unique(generateRandomChar, 0)
-clock.schedule_unique(generateRandomChar, 0)
-clock.schedule_unique(generateRandomChar, 0)
+def scheduleCharacterSpawnings():
+    clock.schedule_unique(generateRandomChar, 0.1)
+    clock.schedule_unique(generateRandomChar, 0.1)
 
-clock.schedule_unique(generateRandomChar, 2) 
-clock.schedule_unique(generateRandomChar, 5)
-clock.schedule_interval(generateRandomChar, randint(8,12))
+    clock.schedule_unique(generateRandomChar, 2) 
+    clock.schedule_unique(generateRandomChar, 5)
+    clock.schedule_interval(generateRandomChar, randint(8,12))
+    print("spawnings scheduled!")
+
+def generateRandNpcAttributes(npc: 'Actor'):
+    global NPCDirections
+    haveSpeed = True
+    haveDirection = True
+
+    #assigning a speed
+    if not hasattr(npc, "speed"):
+        haveSpeed = False
+        if 'enemy' in npc.image:
+            npc.speed = float(choices(
+                npcMovementVelocitys,
+                weights=(1, 2, 3, 2, 1)    
+            )[0])
+        elif 'friend' in npc.image:
+            npc.speed = choice(npcMovementVelocitys[:1])
+
+    #assigning a direction
+    if not hasattr(npc, "direction"):
+        haveDirection = False
+        if npc.x > WIDTH // 2:
+            npc.direction = NPCDirections[0]
+        if npc.x < WIDTH // 2:
+            npc.direction = NPCDirections[1]
+
+    if not (haveSpeed or haveDirection):
+        print(f"spawned one {'Enemy' if 'enemy' in npc.image else 'Friend'} going {npc.direction}, at initial speed {npc.speed}")
+
+    #assigning a frame cycle
+    if not hasattr(npc, "frameGenerator"):
+        print("initialized new pose generator")
+        npcTileKey = str([key for key, value in characterTiles.items()
+                          if value == npc.image][0])[:-2]    #hero, enemy1
+        newGen = characterFramesCycle(npcTileKey) 
+        npc.frameGenerator = newGen
+
+#hero and npc animations
+def characterFramesCycle(characterPrefix: str = "hero"): #generator, needs to be instanciated then used with next()
+    i = 0
+    frameKeys = sorted([
+        key for key in characterTiles
+        if key.startswith(f"{characterPrefix}_")
+    ])
+
+    #not found error
+    if not frameKeys:
+        raise ValueError(f"No frames found for prefix '{characterPrefix}'.")
+
+    while(i <= len(frameKeys)):
+        try:
+            yield frameKeys[i]
+        except IndexError:
+            i = 0
+            yield frameKeys[i]
+        if i >= len(frameKeys): i == 0 
+        else: i += 1
+
+heroGenerator = characterFramesCycle()
 
 def alternateHeroPoses():
-    #Hero animations
     if floor(hero.y) < TOP_GROUND_HEIGHT: #floating
         hero.image = characterTiles["hero_0"]
-    elif hero.image == characterTiles["hero_0"]:
-        hero.image = characterTiles["hero_1"]
-    elif hero.image == characterTiles["hero_1"]:
-        hero.image = characterTiles["hero_0"]
+    hero.image = characterTiles[next(heroGenerator)]
 
 def alternateNPCPoses():
     for npc in NPCs:
-        base_image = npc.image[:-1]  #enemy1_, friend_
-        if npc.image.endswith("0"):
-            npc.image = base_image + "1"
-        elif npc.image.endswith("1"):
-            npc.image = base_image + "0"
+        npc.image = characterTiles[next(npc.frameGenerator)]
 
 def scheduleCharacterAnimations():
-    print("animations scheduled!")
     clock.schedule_interval(alternateHeroPoses, 0.6)
     clock.schedule_interval(alternateNPCPoses, 1)
+    print("animations scheduled!")
 
 def draw(): #place in screen
     screen.fill(BG_COLOR) 
@@ -170,27 +223,9 @@ def update(): #process
     elif hero.x < 10:
         hero.x = 10
 
-    #NPC logic
+    #* NPC logic
     for npc in NPCs:
-        #assigning a speed
-        if not hasattr(npc, "speed"):
-            if 'enemy' in npc.image:
-                npc.speed = float(choices(
-                    npcMovementVelocitys,
-                    weights=(1, 2, 3, 2, 1)    
-                )[0])
-            elif 'friend' in npc.image:
-                npc.speed = choice(npcMovementVelocitys[:1])
-
-        #assinging a direction
-        directions = ['left', 'right']
-        if not hasattr(npc, "direction"):
-            if npc.x > WIDTH // 2:
-                npc.direction = directions[0]
-            if npc.x < WIDTH // 2:
-                npc.direction = directions[1]
-
-            print(f"spawned one {'Enemy' if 'enemy' in npc.image else 'Friend'} going {npc.direction}, at initial speed {npc.speed}")
+        generateRandNpcAttributes(npc)
 
         #movement
         match(npc.direction):
@@ -209,10 +244,10 @@ def update(): #process
             
             #apply only on bounce event
             if npc.x <= 10:
-                npc.direction = directions[1]
+                npc.direction = NPCDirections[1]
                 npc.speed += randVelocityModifier
             elif npc.x >= WIDTH - 10:
-                npc.direction = directions[0]
+                npc.direction = NPCDirections[0]
                 npc.speed += randVelocityModifier
 
             if not npc.direction == lastDirection: print(f"{npc.image} changed direction to: {npc.direction}, at speed {npc.speed}")
@@ -235,6 +270,7 @@ def on_key_down(key):
                 currentVolume -= 0.1
                 music.set_volume(currentVolume)
 
+scheduleCharacterSpawnings()
 scheduleCharacterAnimations()
 
 pgzrun.go()
