@@ -1,21 +1,22 @@
 #space-arrivers -- um jogo platformer 
+#! Atenção, pela documentação do pgzero, 'music' pode não estar disponível para algumas distros linux. se bugar, use windows.
 from random import choice, randint, choices
 from math import floor
 import pgzrun
 
-from pygame import Rect
+from pygame import Rect #for enemy hitboxes
 
-#* Init
+#* PgZero Init
 TITLE = 'Space Arrivers'
 WIDTH = 700
 HEIGHT = 500
 BG_COLOR = (147, 246, 255)
-
 #music
 currentVolume = 0.0     #! change later
 music.set_volume(currentVolume)
 music.play("menu") #menu, initial theme
 
+#* Needed Values
 grassHeightRatio = 5 #where the grass begins
 GROUND_HEIGHT: int = HEIGHT - HEIGHT // grassHeightRatio
 TOP_GROUND_HEIGHT: int = GROUND_HEIGHT - 12
@@ -42,15 +43,26 @@ characterTiles: dict = {
     "enemy2_0": "enemy_0002",
     "enemy2_1": "enemy_0003"
 }
+harderScoresScheduled: dict[int, bool] = { 
+    #as if -- hero.points: state
+    6: False,
+    12: False,
+    30: False,
+    40: False,
+    70: False,
+    100: False,
+    200: False,
+}
 
 #for text
 defaultShadow = (0.5, 0.5) #shadow= arg
 
 #initial states
 hero = Actor(characterTiles["hero_0"])
-hero.topleft = (WIDTH // 2, GROUND_HEIGHT - 30)
-hero.lifes = 5
-hero.points = 0 # 20: bronze, 50: silver, 100: gold!, 150: platinum!
+hero.topleft: tuple = (WIDTH // 2, GROUND_HEIGHT - 30)
+hero.lifes: int = 5
+hero.points: int = 0 # 20: bronze, 50: silver, 100: gold!, 150: platinum!
+hero.invincible: bool = False
 
 NPCs: list['Actor'] = []
 
@@ -67,23 +79,20 @@ NPCDirections = ['left', 'right']
 #* Actions & Main
 #npc generation
 def generateRandomChar():
+    if len(NPCs) >= 10: return
+    else: ... #!play spawn sound
+
     randCharChoice = str(choices(
         ['enemy1', 'enemy2', 'friend'], 
-        weights=(0.4, 0.4, 0.2)
+        weights=(0.45, 0.45, 0.1)
     )[0])
     newChar = Actor(characterTiles[randCharChoice + '_0'])
     newChar.topleft = (randint(30, WIDTH - 30), GROUND_HEIGHT - 24)
+    generateRandNpcAttributes(newChar)
+
+    #TODO: hero invincible if spawned too much close
 
     NPCs.append(newChar)
-
-def scheduleCharacterSpawnings():
-    clock.schedule_unique(generateRandomChar, 0.1)
-    clock.schedule_unique(generateRandomChar, 0.1)
-
-    clock.schedule_unique(generateRandomChar, 2) 
-    clock.schedule_unique(generateRandomChar, 5)
-    clock.schedule_interval(generateRandomChar, randint(8,12))
-    print("spawnings scheduled!")
 
 def generateRandNpcAttributes(npc: 'Actor'):
     global NPCDirections
@@ -109,12 +118,11 @@ def generateRandNpcAttributes(npc: 'Actor'):
         if npc.x < WIDTH // 2:
             npc.direction = NPCDirections[1]
 
-    if not (haveSpeed or haveDirection):
+    if not haveSpeed or not haveDirection:
         print(f"spawned one {'Enemy' if 'enemy' in npc.image else 'Friend'} going {npc.direction}, at initial speed {npc.speed}")
 
     #assigning a frame cycle
     if not hasattr(npc, "frameGenerator"):
-        print("initialized new pose generator")
         npcTileKey = str([key for key, value in characterTiles.items()
                           if value == npc.image][0])[:-2]    #hero, enemy1
         newGen = characterFramesCycle(npcTileKey) 
@@ -152,11 +160,54 @@ def alternateNPCPoses():
     for npc in NPCs:
         npc.image = characterTiles[next(npc.frameGenerator)]
 
+
+
+#Actions and more animations
+def isTopCollision(npc: 'Actor', size: int = 8) -> bool:
+    hitbox = Rect(
+        npc.left - size, npc.top - 6, 
+        npc.width + (size*2), 6
+    )
+    return hero.colliderect(hitbox) and heroVerticalVelocity > 0 #check if it's falling
+
+def changeHeroInvicibility(changeTo: bool = False):
+    hero.invincible = changeTo if changeTo == True else False
+    clock.schedule_unique(changeHeroInvicibility, 2)
+
+#Schedulers
+def checkForHarderScores():
+    for key in sorted(harderScoresScheduled.keys()):
+        if harderScoresScheduled[key] == False and hero.points == key:
+            match(harderScoresScheduled[key]):
+                case 70:
+                    clock.schedule_interval(generateRandomChar, 8)
+                case 100:
+                    clock.schedule_interval(generateRandomChar, 7)
+                case 200:
+                    clock.schedule_interval(generateRandomChar, 6)
+                case _:
+                    clock.schedule_interval(generateRandomChar, randint(8, 15))
+
+            #does not continue to next keys
+            harderScoresScheduled[key] = True
+            print("INCREASING DIFFICULTY!")
+            break; 
+
+
+def scheduleCharacterSpawnings():
+    clock.schedule_unique(generateRandomChar, 2)
+    clock.schedule_unique(generateRandomChar, 1)
+
+    clock.schedule_interval(generateRandomChar, randint(6,12))
+    clock.schedule_interval(checkForHarderScores, 3)
+    print("spawnings scheduled!")
+
 def scheduleCharacterAnimations():
     clock.schedule_interval(alternateHeroPoses, 0.6)
     clock.schedule_interval(alternateNPCPoses, 1)
     print("animations scheduled!")
 
+#* PgZero
 def draw(): #place in screen
     screen.fill(BG_COLOR) 
 
@@ -182,16 +233,22 @@ def draw(): #place in screen
 
     for npc in NPCs:
         npc.draw()
+        #? debug
+        hitbox = Rect(
+            npc.left - 8, npc.top - 4, 
+            npc.width + 16, 4
+        )
+        screen.draw.rect(hitbox, (200, 0, 0))
     
-    #drawing debug info
+    #?drawing debug info
     screen.draw.text("y: " + str(hero.y), (0,0), shadow=defaultShadow)
     screen.draw.text("v: " + str(heroVerticalVelocity), (0,15), shadow=defaultShadow)
-    screen.draw.text("m: " + str(heroMovementVelocity), (0,30), shadow=defaultShadow)
-    screen.draw.text("j: " + str(jumpAcceleration), (0,45), shadow=defaultShadow)
+    screen.draw.text("NPC count: " + str(len(NPCs)), (0,30), shadow=defaultShadow)
     screen.draw.text("volume: " + str(round(currentVolume*10)), (0,60), shadow=defaultShadow)
 
-    screen.draw.text("up key: " + str(keyboard.up), (0,90), shadow=(0.3, 0.5))
-    screen.draw.text("down key: " + str(keyboard.down), (0,105), shadow=(0.3, 0.5))
+    screen.draw.text("invincible: " + str(hero.invincible), (WIDTH - WIDTH // 4.5, 0), shadow=(0.8, 0.5))
+    screen.draw.text("lifes: " + str(hero.lifes), (WIDTH - WIDTH // 4.5, 30), shadow=(0.8, 0.5))
+    screen.draw.text("POINTS: " + str(hero.points), (WIDTH - WIDTH // 4.5, 60), shadow=(0.8, 0.5))
 
 def update(): #process
     global heroVerticalVelocity
@@ -206,7 +263,9 @@ def update(): #process
         heroVerticalVelocity += jumpAcceleration
     #landing down
     if keyboard.down and hero.y < TOP_GROUND_HEIGHT:
+        #! play fall sound
         heroVerticalVelocity += 1
+    #!and play landing sound after
 
     #* collision w/ ground and gravity
     if hero.y > TOP_GROUND_HEIGHT:
@@ -225,8 +284,6 @@ def update(): #process
 
     #* NPC logic
     for npc in NPCs:
-        generateRandNpcAttributes(npc)
-
         #movement
         match(npc.direction):
             case 'left':
@@ -250,7 +307,44 @@ def update(): #process
                 npc.direction = NPCDirections[0]
                 npc.speed += randVelocityModifier
 
-            if not npc.direction == lastDirection: print(f"{npc.image} changed direction to: {npc.direction}, at speed {npc.speed}")
+            #tired cap
+            wasTired = False
+            if npc.speed > 15: 
+                npc.speed = 1.5
+                wasTired = True
+
+            if not npc.direction == lastDirection: print(f"{npc.image} changed direction to: {npc.direction}, at speed {npc.speed}{", and was tired out!" if wasTired else ""}")
+    
+    heroLifesBefore = int(hero.lifes)
+    wasHit = False
+    #collisions with npcs (soul of the game)
+    for npc in NPCs:
+        if hero.colliderect(npc):
+            if 'enemy' in npc.image:
+                #! play kill sound
+                #collision at top: kills
+                if isTopCollision(npc, size=10):
+                    NPCs.remove(npc)
+                    hero.points += 1
+                else:  
+                    #side collision: hurts
+                    #!play hurt sound
+                    if not wasHit and not hero.invincible: #invencibility frames
+                        hero.lifes -= 1
+                        changeHeroInvicibility(True)
+                        wasHit = True
+            elif 'friend' in npc.image:
+                #! play heart sound
+                hero.lifes += 1 if hero.lifes+1 <= 5 else 0
+                NPCs.remove(npc)
+                print('friend met!')
+
+    if heroLifesBefore > hero.lifes:
+        changeHeroInvicibility(True)
+
+    #game ending
+    if hero.lifes <= 0:
+        print("died!")
 
 #more bindings
 def on_key_down(key):
