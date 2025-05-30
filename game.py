@@ -1,10 +1,11 @@
 #space-arrivers -- um jogo platformer 
-#! Atenção, pela documentação do pgzero, 'music' pode não estar disponível para algumas distros linux. se bugar, use windows.
+#! Atenção: pela documentação do pgzero, 'music' pode não estar disponível para algumas distros linux. se bugar, use windows.
 from random import choice, randint, choices
 from math import floor
 import pgzrun
 
 from pygame import Rect #for enemy hitboxes
+from pygame.mixer import Sound #! necessário, ou os sons de Sfx ficariam muito altos.
 
 #* PgZero Init
 TITLE = 'Space Arrivers'
@@ -12,7 +13,7 @@ WIDTH = 700
 HEIGHT = 500
 BG_COLOR = (147, 246, 255)
 #music
-currentVolume = 0.0     #! change later
+currentVolume = 0.3     #! change later
 music.set_volume(currentVolume)
 music.play("menu") #menu, initial theme
 
@@ -54,6 +55,22 @@ harderScoresScheduled: dict[int, bool] = {
     200: False,
 }
 
+# including used sfx
+soundsPrefix = "sounds/"
+soundsSuffix = ".mp3"
+soundEffects: dict[str, Sound] = {
+    "fall": Sound(soundsPrefix + "fall" + soundsSuffix),
+    "heal": Sound(soundsPrefix + "heal" + soundsSuffix),
+    "hurt": Sound(soundsPrefix + "hurt" + soundsSuffix),
+    "jump": Sound(soundsPrefix + "jump" + soundsSuffix),
+    "kill": Sound(soundsPrefix + "kill" + soundsSuffix),
+    "landing": Sound(soundsPrefix + "landing1" + soundsSuffix),
+    "spawn": Sound(soundsPrefix + "spawn" + soundsSuffix),
+    "start": Sound(soundsPrefix + "start" + soundsSuffix)
+}
+for sfx in soundEffects.values():
+    sfx.set_volume(currentVolume)
+
 #for text
 defaultShadow = (0.5, 0.5) #shadow= arg
 
@@ -80,7 +97,7 @@ NPCDirections = ['left', 'right']
 #npc generation
 def generateRandomChar():
     if len(NPCs) >= 10: return
-    else: ... #!play spawn sound
+    else: soundEffects["spawn"].play()
 
     randCharChoice = str(choices(
         ['enemy1', 'enemy2', 'friend'], 
@@ -160,9 +177,7 @@ def alternateNPCPoses():
     for npc in NPCs:
         npc.image = characterTiles[next(npc.frameGenerator)]
 
-
-
-#Actions and more animations
+#Actions and more
 def isTopCollision(npc: 'Actor', size: int = 8) -> bool:
     hitbox = Rect(
         npc.left - size, npc.top - 6, 
@@ -260,12 +275,20 @@ def update(): #process
         hero.x -= heroMovementVelocity
     #jumping
     if keyboard.up and floor(hero.y) == TOP_GROUND_HEIGHT:
+        soundEffects["jump"].play()
         heroVerticalVelocity += jumpAcceleration
-    #landing down
+    #fall down
+    wasFalling = False
+    fallChannel = None
     if keyboard.down and hero.y < TOP_GROUND_HEIGHT:
-        #! play fall sound
+        wasFalling = True
+        fallChannel = soundEffects["fall"].play()
         heroVerticalVelocity += 1
-    #!and play landing sound after
+    #landing after falling
+    print(wasFalling and floor(hero.y) == TOP_GROUND_HEIGHT)
+    if wasFalling and floor(hero.y) == TOP_GROUND_HEIGHT:
+        if fallChannel: fallChannel.stop()
+        soundEffects["landing"].play()
 
     #* collision w/ ground and gravity
     if hero.y > TOP_GROUND_HEIGHT:
@@ -313,7 +336,7 @@ def update(): #process
                 npc.speed = 1.5
                 wasTired = True
 
-            if not npc.direction == lastDirection: print(f"{npc.image} changed direction to: {npc.direction}, at speed {npc.speed}{", and was tired out!" if wasTired else ""}")
+            # if not npc.direction == lastDirection: print(f"{npc.image} changed direction to: {npc.direction}, at speed {npc.speed}{", and was tired out!" if wasTired else ""}")
     
     heroLifesBefore = int(hero.lifes)
     wasHit = False
@@ -321,20 +344,20 @@ def update(): #process
     for npc in NPCs:
         if hero.colliderect(npc):
             if 'enemy' in npc.image:
-                #! play kill sound
                 #collision at top: kills
                 if isTopCollision(npc, size=10):
+                    soundEffects["kill"].play()
                     NPCs.remove(npc)
                     hero.points += 1
                 else:  
                     #side collision: hurts
-                    #!play hurt sound
                     if not wasHit and not hero.invincible: #invencibility frames
+                        soundEffects["hurt"].play()
                         hero.lifes -= 1
                         changeHeroInvicibility(True)
                         wasHit = True
             elif 'friend' in npc.image:
-                #! play heart sound
+                soundEffects["heal"].play()
                 hero.lifes += 1 if hero.lifes+1 <= 5 else 0
                 NPCs.remove(npc)
                 print('friend met!')
@@ -359,10 +382,14 @@ def on_key_down(key):
             if currentVolume + 0.1 <= 1.0:
                 currentVolume += 0.1
                 music.set_volume(currentVolume)
+                for sfx in soundEffects.values():
+                    sfx.set_volume(currentVolume)
         case keys.PAGEDOWN:
             if currentVolume - 0.1 >= 0.0:
                 currentVolume -= 0.1
                 music.set_volume(currentVolume)
+                for sfx in soundEffects.values():
+                    sfx.set_volume(currentVolume)
 
 scheduleCharacterSpawnings()
 scheduleCharacterAnimations()
