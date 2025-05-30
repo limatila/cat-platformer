@@ -7,11 +7,18 @@ import pgzrun
 from pygame import Rect #for enemy hitboxes
 from pygame.mixer import Sound #! necessário, ou os sons de Sfx ficariam muito altos.
 
+DEBUG = True #show debug text ingame
+
 #* PgZero Init
 TITLE = 'Space Arrivers'
 WIDTH = 700
 HEIGHT = 500
-BG_COLOR = (147, 246, 255)
+game_state: str = "menu" #menu | game | end
+BG_COLORS = {
+    "menu": (96, 125, 242),
+    "game": (147, 246, 255),
+    "end": (255, 255, 255),
+}
 #music
 currentVolume = 0.3     #! change later
 music.set_volume(currentVolume)
@@ -44,15 +51,9 @@ characterTiles: dict = {
     "enemy2_0": "enemy_0002",
     "enemy2_1": "enemy_0003"
 }
-harderScoresScheduled: dict[int, bool] = { 
-    #as if -- hero.points: state
-    6: False,
-    12: False,
-    30: False,
-    40: False,
-    70: False,
-    100: False,
-    200: False,
+soundTiles: dict[bool, str] = {
+    True: "sound_on",
+    False: "sound_off",
 }
 
 # including used sfx
@@ -71,14 +72,31 @@ soundEffects: dict[str, Sound] = {
 for sfx in soundEffects.values():
     sfx.set_volume(currentVolume)
 
-#for text
+#*menu initial states
+buttonDefaultSizes = (
+    0,#left
+    0,#top
+    200,#width
+    70#height
+)
+quitButton = Rect(buttonDefaultSizes)
+startButton = Rect(buttonDefaultSizes)
+helpButton = Rect(buttonDefaultSizes)
+soundButton = Actor(soundTiles[True])
+
+#positions
+soundButton.topleft = (WIDTH - 80, 50)
+startButton.center  = ((WIDTH // 2) - 120, (HEIGHT // 5) * 3)
+quitButton.center   = ((WIDTH // 2) + 120, (HEIGHT // 5) * 3) 
+helpButton.center   = (WIDTH // 2, (HEIGHT // 5) * 4) 
+
 defaultShadow = (0.5, 0.5) #shadow= arg
 
-#initial states
+#*game initial states
 hero = Actor(characterTiles["hero_0"])
 hero.topleft: tuple = (WIDTH // 2, GROUND_HEIGHT - 30)
 hero.lifes: int = 5
-hero.points: int = 0 # 20: bronze, 50: silver, 100: gold!, 150: platinum!
+hero.points: int = 0    #? 20: bronze, 50: silver, 100: gold!, 150: platinum!
 hero.invincible: bool = False
 
 NPCs: list['Actor'] = []
@@ -92,6 +110,17 @@ jumpAcceleration = -13
 #npcs
 npcMovementVelocitys = [1, 1.5, 2, 3, 5] 
 NPCDirections = ['left', 'right']
+
+harderScoresSchedules: dict[int, bool] = { 
+    #as if -- hero.points: state
+    6: False,
+    12: False,
+    30: False,
+    40: False,
+    70: False,
+    100: False,
+    200: False,
+}
 
 #* Actions & Main
 #npc generation
@@ -191,9 +220,9 @@ def changeHeroInvicibility(changeTo: bool = False):
 
 #Schedulers
 def checkForHarderScores():
-    for key in sorted(harderScoresScheduled.keys()):
-        if harderScoresScheduled[key] == False and hero.points == key:
-            match(harderScoresScheduled[key]):
+    for key in sorted(harderScoresSchedules.keys()):
+        if harderScoresSchedules[key] == False and hero.points == key:
+            match(harderScoresSchedules[key]):
                 case 70:
                     clock.schedule_interval(generateRandomChar, 8)
                 case 100:
@@ -204,7 +233,7 @@ def checkForHarderScores():
                     clock.schedule_interval(generateRandomChar, randint(8, 15))
 
             #does not continue to next keys
-            harderScoresScheduled[key] = True
+            harderScoresSchedules[key] = True
             print("INCREASING DIFFICULTY!")
             break; 
 
@@ -224,150 +253,170 @@ def scheduleCharacterAnimations():
 
 #* PgZero
 def draw(): #place in screen
-    screen.fill(BG_COLOR) 
+    screen.fill(BG_COLORS[game_state]) 
 
-    #drawing grass
-    for leftPosition in range(WIDTH):
-        if leftPosition % 18 == 0: #every 10 pixels?
-            newDirt = Actor(sceneTiles["dirtConnected"])
-            newDirt.topleft = (leftPosition, GROUND_HEIGHT)
-            newDirt.draw()
+    match(game_state):
+        #** game menu
+        case "menu":
+            #buttons 
+            screen.draw.filled_rect(startButton, (80, 210, 80))
+            screen.draw.filled_rect(quitButton, (230, 80, 80))
+            screen.draw.filled_rect(helpButton, (255, 220, 170))
+            soundButton.draw()
 
-    #drawing dirt bellow
-    initialTopPosition: int = GROUND_HEIGHT #positioning bellow grass
-    for topPosition in range(initialTopPosition, HEIGHT):
-        if topPosition % 18 == 0:
+            #text
+
+            
+
+        #** game match
+        case "game": 
+            #drawing grass
             for leftPosition in range(WIDTH):
                 if leftPosition % 18 == 0: #every 10 pixels?
-                    newDirt = Actor(sceneTiles["mudConnected"])
-                    newDirt.topleft = (leftPosition, topPosition)
+                    newDirt = Actor(sceneTiles["dirtConnected"])
+                    newDirt.topleft = (leftPosition, GROUND_HEIGHT)
                     newDirt.draw()
 
-    #drawing objects
-    hero.draw()
+            #drawing ground bellow
+            initialTopPosition: int = GROUND_HEIGHT #positioning bellow grass
+            for topPosition in range(initialTopPosition, HEIGHT):
+                if topPosition % 18 == 0:
+                    for leftPosition in range(WIDTH):
+                        if leftPosition % 18 == 0: #every 10 pixels?
+                            newDirt = Actor(sceneTiles["mudConnected"])
+                            newDirt.topleft = (leftPosition, topPosition)
+                            newDirt.draw()
 
-    for npc in NPCs:
-        npc.draw()
-        #? debug
-        hitbox = Rect(
-            npc.left - 8, npc.top - 4, 
-            npc.width + 16, 4
-        )
-        screen.draw.rect(hitbox, (200, 0, 0))
-    
-    #?drawing debug info
-    screen.draw.text("y: " + str(hero.y), (0,0), shadow=defaultShadow)
-    screen.draw.text("v: " + str(heroVerticalVelocity), (0,15), shadow=defaultShadow)
-    screen.draw.text("NPC count: " + str(len(NPCs)), (0,30), shadow=defaultShadow)
-    screen.draw.text("volume: " + str(round(currentVolume*10)), (0,60), shadow=defaultShadow)
+            #drawing characters/objects
+            hero.draw()
 
-    screen.draw.text("invincible: " + str(hero.invincible), (WIDTH - WIDTH // 4.5, 0), shadow=(0.8, 0.5))
-    screen.draw.text("lifes: " + str(hero.lifes), (WIDTH - WIDTH // 4.5, 30), shadow=(0.8, 0.5))
-    screen.draw.text("POINTS: " + str(hero.points), (WIDTH - WIDTH // 4.5, 60), shadow=(0.8, 0.5))
+            for npc in NPCs:
+                npc.draw()
+                
+                if DEBUG:
+                    hitbox = Rect(
+                        npc.left - 8, npc.top - 4, 
+                        npc.width + 16, 4
+                    )
+                    screen.draw.rect(hitbox, (200, 0, 0))
+            
+            if DEBUG:
+                screen.draw.text("y: " + str(hero.y), (0,0), shadow=defaultShadow)
+                screen.draw.text("v: " + str(heroVerticalVelocity), (0,15), shadow=defaultShadow)
+                screen.draw.text("NPC count: " + str(len(NPCs)), (0,30), shadow=defaultShadow)
+                screen.draw.text("volume: " + str(round(currentVolume*10)), (0,60), shadow=defaultShadow)
+
+                screen.draw.text("invincible: " + str(hero.invincible), (WIDTH - WIDTH // 4.5, 0), shadow=(0.8, 0.5))
+                screen.draw.text("lifes: " + str(hero.lifes), (WIDTH - WIDTH // 4.5, 30), shadow=(0.8, 0.5))
+                screen.draw.text("POINTS: " + str(hero.points), (WIDTH - WIDTH // 4.5, 60), shadow=(0.8, 0.5))
+
+        #** game ending
+        case "end": ...
 
 def update(): #process
     global heroVerticalVelocity
 
-    #* movement
-    if keyboard.right:
-        hero.x += heroMovementVelocity
-    if keyboard.left:
-        hero.x -= heroMovementVelocity
-    #jumping
-    if keyboard.up and floor(hero.y) == TOP_GROUND_HEIGHT:
-        soundEffects["jump"].play()
-        heroVerticalVelocity += jumpAcceleration
-    #fall down
-    wasFalling = False
-    fallChannel = None
-    if keyboard.down and hero.y < TOP_GROUND_HEIGHT:
-        wasFalling = True
-        fallChannel = soundEffects["fall"].play()
-        heroVerticalVelocity += 1
-    #landing after falling
-    print(wasFalling and floor(hero.y) == TOP_GROUND_HEIGHT)
-    if wasFalling and floor(hero.y) == TOP_GROUND_HEIGHT:
-        if fallChannel: fallChannel.stop()
-        soundEffects["landing"].play()
+    match(game_state):
+        #** game menu
+        case "menu": 
+            soundButton.image = soundTiles[True] if floor(currentVolume*10) > 0 else soundTiles[False]
 
-    #* collision w/ ground and gravity
-    if hero.y > TOP_GROUND_HEIGHT:
-        hero.y = TOP_GROUND_HEIGHT
-        heroVerticalVelocity = 0
+        #** game match
+        case "game":
+            #* movement
+            if keyboard.right:
+                hero.x += heroMovementVelocity
+            if keyboard.left:
+                hero.x -= heroMovementVelocity
+            #jumping
+            if keyboard.up and floor(hero.y) == TOP_GROUND_HEIGHT:
+                soundEffects["jump"].play()
+                heroVerticalVelocity += jumpAcceleration
+            #fall down
+            if keyboard.down and hero.y < TOP_GROUND_HEIGHT:
+                heroVerticalVelocity += 1
 
-    #apply gravity
-    hero.y += heroVerticalVelocity
-    heroVerticalVelocity += gravityAceleration
+            #* collision w/ ground and gravity
+            if hero.y > TOP_GROUND_HEIGHT:
+                hero.y = TOP_GROUND_HEIGHT
+                heroVerticalVelocity = 0
 
-    #world border
-    if hero.x > WIDTH - 10:
-        hero.x = WIDTH - 10
-    elif hero.x < 10:
-        hero.x = 10
+            #apply gravity
+            hero.y += heroVerticalVelocity
+            heroVerticalVelocity += gravityAceleration
 
-    #* NPC logic
-    for npc in NPCs:
-        #movement
-        match(npc.direction):
-            case 'left':
-                npc.x -= npc.speed
-            case 'right':
-                npc.x += npc.speed
+            #world border
+            if hero.x > WIDTH - 10:
+                hero.x = WIDTH - 10
+            elif hero.x < 10:
+                hero.x = 10
 
-        #only enemy will bounce in walls
-        if 'enemy' in npc.image:
-            lastDirection: str = npc.direction
-            randVelocityModifier = int(choices(
-                (-1, 1, 2), 
-                weights=(0.4, 0.5, 0.1)
-            )[0])
-            
-            #apply only on bounce event
-            if npc.x <= 10:
-                npc.direction = NPCDirections[1]
-                npc.speed += randVelocityModifier
-            elif npc.x >= WIDTH - 10:
-                npc.direction = NPCDirections[0]
-                npc.speed += randVelocityModifier
+            #* NPC logic
+            for npc in NPCs:
+                #movement
+                match(npc.direction):
+                    case 'left':
+                        npc.x -= npc.speed
+                    case 'right':
+                        npc.x += npc.speed
 
-            #tired cap
-            wasTired = False
-            if npc.speed > 15: 
-                npc.speed = 1.5
-                wasTired = True
+                #only enemy will bounce in walls
+                if 'enemy' in npc.image:
+                    lastDirection = str(npc.direction)
+                    randVelocityModifier = int(choices(
+                        (-1, 1, 2), 
+                        weights=(0.4, 0.5, 0.1)
+                    )[0])
+                    
+                    #apply only on bounce event
+                    if npc.x <= 10:
+                        npc.direction = NPCDirections[1]
+                        npc.speed += randVelocityModifier
+                    elif npc.x >= WIDTH - 10:
+                        npc.direction = NPCDirections[0]
+                        npc.speed += randVelocityModifier
 
-            # if not npc.direction == lastDirection: print(f"{npc.image} changed direction to: {npc.direction}, at speed {npc.speed}{", and was tired out!" if wasTired else ""}")
+                    #tired cap
+                    wasTired = False
+                    if npc.speed > 15: 
+                        npc.speed = 1.5
+                        wasTired = True
+
+                    # if not npc.direction == lastDirection: print(f"{npc.image} changed direction to: {npc.direction}, at speed {npc.speed}{", and was tired out!" if wasTired else ""}")
     
-    heroLifesBefore = int(hero.lifes)
-    wasHit = False
-    #collisions with npcs (soul of the game)
-    for npc in NPCs:
-        if hero.colliderect(npc):
-            if 'enemy' in npc.image:
-                #collision at top: kills
-                if isTopCollision(npc, size=10):
-                    soundEffects["kill"].play()
-                    NPCs.remove(npc)
-                    hero.points += 1
-                else:  
-                    #side collision: hurts
-                    if not wasHit and not hero.invincible: #invencibility frames
-                        soundEffects["hurt"].play()
-                        hero.lifes -= 1
-                        changeHeroInvicibility(True)
-                        wasHit = True
-            elif 'friend' in npc.image:
-                soundEffects["heal"].play()
-                hero.lifes += 1 if hero.lifes+1 <= 5 else 0
-                NPCs.remove(npc)
-                print('friend met!')
+            heroLifesBefore = hero.lifes
+            wasHit = False
+            #collisions with npcs (soul of the game)
+            for npc in NPCs:
+                if hero.colliderect(npc):
+                    if 'enemy' in npc.image:
+                        #collision at top: kills
+                        if isTopCollision(npc, size=10):
+                            soundEffects["kill"].play()
+                            NPCs.remove(npc)
+                            hero.points += 1
+                        else:  
+                            #side collision: hurts
+                            if not wasHit and not hero.invincible: #invencibility frames
+                                soundEffects["hurt"].play()
+                                hero.lifes -= 1
+                                changeHeroInvicibility(True)
+                                wasHit = True
+                    elif 'friend' in npc.image:
+                        soundEffects["heal"].play()
+                        hero.lifes += 1 if hero.lifes+1 <= 5 else 0
+                        NPCs.remove(npc)
+                        print('friend met!')
 
-    if heroLifesBefore > hero.lifes:
-        changeHeroInvicibility(True)
+            if heroLifesBefore > hero.lifes:
+                changeHeroInvicibility(True)
 
-    #game ending
-    if hero.lifes <= 0:
-        print("died!")
+            #game ending
+            if hero.lifes <= 0:
+                print("died!")
+            
+        #** game ending
+        case "end": ...
 
 #more bindings
 def on_key_down(key):
@@ -381,17 +430,34 @@ def on_key_down(key):
         case keys.PAGEUP:
             if currentVolume + 0.1 <= 1.0:
                 currentVolume += 0.1
+                currentVolume = currentVolume
                 music.set_volume(currentVolume)
                 for sfx in soundEffects.values():
                     sfx.set_volume(currentVolume)
         case keys.PAGEDOWN:
             if currentVolume - 0.1 >= 0.0:
                 currentVolume -= 0.1
+                currentVolume = currentVolume
                 music.set_volume(currentVolume)
                 for sfx in soundEffects.values():
                     sfx.set_volume(currentVolume)
 
-scheduleCharacterSpawnings()
-scheduleCharacterAnimations()
+volumeBeforeMute: int
+def on_mouse_down(pos):
+    global currentVolume, volumeBeforeMute
+
+    #sound button - mute/unmute
+    if soundButton.collidepoint(pos):
+        if currentVolume > 0: 
+            print("mute")
+            volumeBeforeMute = currentVolume
+            currentVolume = 0
+        else: 
+            print("mute")
+            currentVolume = volumeBeforeMute
+
+        music.set_volume(currentVolume)
+        for sfx in soundEffects.values():
+            sfx.set_volume(currentVolume)
 
 pgzrun.go()
