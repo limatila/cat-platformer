@@ -7,10 +7,10 @@ import pgzrun
 from pygame import Rect #for enemy hitboxes
 from pygame.mixer import Sound #! necessário, ou os sons de Sfx ficariam muito altos.
 
-DEBUG = True #show debug text ingame
+DEBUG = False #show debug text ingame
 
 #* PgZero Init
-TITLE = 'Space Arrivers'
+TITLE = 'Space Stompers'
 WIDTH = 700
 HEIGHT = 500
 game_state: str = "menu" #menu | game | end
@@ -20,7 +20,7 @@ BG_COLORS = {
     "end": (4, 5, 60),
 }
 #music
-currentVolume = 0.3     #TODO: change default
+currentVolume = 0.2     #TODO: change default
 music.set_volume(currentVolume)
 music.play("menu") #menu, initial theme
 
@@ -69,8 +69,10 @@ soundEffects: dict[str, Sound] = {
     "spawn": Sound(soundsPrefix + "spawn" + soundsSuffix),
     "start": Sound(soundsPrefix + "start" + soundsSuffix)
 }
-for sfx in soundEffects.values():
+for key, sfx in soundEffects.items():
     sfx.set_volume(currentVolume)
+    if key == "jump":
+        sfx.set_volume(max(floor((currentVolume - 0.1) * 10)/10, 0))
 
 #*menu initial states
 buttonDefaultSizes = (
@@ -124,9 +126,9 @@ for topPosition in range(GROUND_HEIGHT, HEIGHT):
 
 hero = Actor(characterTiles["hero_0"])
 hero.topleft: tuple = (WIDTH // 2, GROUND_HEIGHT - 30)
-hero.lifes: int = 1     #TODO: change default
+hero.lifes: int = 3     #TODO: change default
 hero.points: int = 0    #20: bronze, 50: silver, 100: gold!, 150: platinum!
-hero.invincible: bool = False
+hero.invincible: bool = True
 
 NPCs: list['Actor'] = []
 
@@ -137,7 +139,7 @@ gravityAceleration = 0.3
 jumpAcceleration = -13
 
 #npcs
-npcMovementVelocitys = [1, 1.5, 2, 3, 5] 
+npcMovementVelocitys = [1, 1.5, 2, 3, 5, 6] 
 NPCDirections = ['left', 'right']
 
 harderScoresSchedules: dict[int, bool] = { 
@@ -151,16 +153,13 @@ harderScoresSchedules: dict[int, bool] = {
     200: False,
 }
 scoreMedals: dict[int, str] = {
-    10: "honorable mention",
+    3: "honorable mention",
     20: "bronze",
-    50: "silver",
-    100: "gold",
-    150: "platinum",
-    200: "ok you need to stop."
+    40: "silver",
+    70: "gold",
+    120: "platinum",
+    150: "ok you need to stop."
 }
-
-#* end menu
-
 
 #* Actions & Main
 #npc generation
@@ -176,7 +175,12 @@ def generateRandomChar():
     newChar.topleft = (randint(30, WIDTH - 30), GROUND_HEIGHT - 24)
     generateRandNpcAttributes(newChar)
 
-    #TODO: hero invincible if spawned too much close
+    #prevent immediate spawn damage
+    if ((newChar.x in range(round(hero.x - WIDTH / 9), round(hero.x + WIDTH / 9))
+        and newChar.y in range (round(hero.y - HEIGHT / 8), round(hero.y + HEIGHT / 8)))
+        and 'enemy' in newChar.image):
+        changeHeroInvicibility(True)
+        print("[DEBUG] Enemy spawned too close, enabling invincibility")
 
     NPCs.append(newChar)
 
@@ -189,9 +193,13 @@ def generateRandNpcAttributes(npc: 'Actor'):
     if not hasattr(npc, "speed"):
         haveSpeed = False
         if 'enemy' in npc.image:
+            isHarderScores = True if hero.points >= 20 else False #then give more speed
+            if isHarderScores:
+                weightSelected = (0.5, 1, 2, 3, 1.2, 1)
+            else: weightSelected = (1, 2, 2, 4, 1, 0.5) 
             npc.speed = float(choices(
                 npcMovementVelocitys,
-                weights=(1, 2, 3, 2, 1)    
+                weights=weightSelected
             )[0])
         elif 'friend' in npc.image:
             npc.speed = choice(npcMovementVelocitys[:1])
@@ -205,7 +213,7 @@ def generateRandNpcAttributes(npc: 'Actor'):
             npc.direction = NPCDirections[1]
 
     if not haveSpeed or not haveDirection:
-        print(f"spawned one {'Enemy' if 'enemy' in npc.image else 'Friend'} going {npc.direction}, at initial speed {npc.speed}")
+        print(f"[DEBUG] spawned one {'Enemy' if 'enemy' in npc.image else 'Friend'} going {npc.direction}, at initial speed {npc.speed}")
 
     #assigning a frame cycle
     if not hasattr(npc, "frameGenerator"):
@@ -238,8 +246,6 @@ def characterFramesCycle(characterPrefix: str = "hero"): #generator, needs to be
 heroGenerator = characterFramesCycle()
 
 def alternateHeroPoses():
-    if floor(hero.y) < TOP_GROUND_HEIGHT: #floating
-        hero.image = characterTiles["hero_0"]
     hero.image = characterTiles[next(heroGenerator)]
 
 def alternateNPCPoses():
@@ -255,9 +261,9 @@ def isTopCollision(npc: 'Actor', size: int = 8) -> bool:
     hitbox = generateNPCHitbox(npc, size)
     return hero.colliderect(hitbox) and heroVerticalVelocity > 0 #check if it's falling
 
-def changeHeroInvicibility(changeTo: bool = False):
+def changeHeroInvicibility(changeTo: bool = False, addDelay: int = 0):
     hero.invincible = changeTo if changeTo == True else False
-    clock.schedule_unique(changeHeroInvicibility, 2)
+    clock.schedule_unique(changeHeroInvicibility, 2 + addDelay)
 
 #Schedulers
 def checkForHarderScores():
@@ -275,22 +281,24 @@ def checkForHarderScores():
 
             #does not continue to next keys
             harderScoresSchedules[key] = True
-            print("INCREASING DIFFICULTY!")
+            print("[INFO] INCREASING DIFFICULTY!")
             break; 
 
 
 def scheduleCharacterSpawnings():
+    generateRandomChar()
     clock.schedule_unique(generateRandomChar, 2)
-    clock.schedule_unique(generateRandomChar, 1)
+    clock.schedule_unique(generateRandomChar, 5)
+    clock.schedule_unique(generateRandomChar, 9)
 
     clock.schedule_interval(generateRandomChar, randint(6,12))
     clock.schedule_interval(checkForHarderScores, 3)
-    print("spawnings scheduled!")
+    print("[INFO] spawnings scheduled!")
 
 def scheduleCharacterAnimations():
     clock.schedule_interval(alternateHeroPoses, 0.6)
     clock.schedule_interval(alternateNPCPoses, 1)
-    print("animations scheduled!")
+    print("[INFO] animations scheduled!")
 
 #* PgZero
 def draw(): #place in screen
@@ -326,15 +334,13 @@ def draw(): #place in screen
                 ground.draw()
 
             #drawing characters/objects
-            hero.draw()
-
             for npc in NPCs:
                 npc.draw()
-                
-                if DEBUG:
+                if DEBUG and 'enemy' in npc.image:
                     hitbox = generateNPCHitbox(npc)
                     screen.draw.rect(hitbox, (200, 0, 0))
-            
+            hero.draw()
+
             if DEBUG:
                 screen.draw.text("y: " + str(hero.y), (0,0), shadow=debugTextShadow)
                 screen.draw.text("v: " + str(heroVerticalVelocity), (0,15), shadow=debugTextShadow)
@@ -358,15 +364,11 @@ def draw(): #place in screen
                         medalText = str(medal)
 
                 if medalText:
-                    screen.draw.text(f"You got a {medalText.title()} MEDAL, Nice!", center=(WIDTH // 2, (HEIGHT // 5) * 2), shadow=(titleTextShadow), fontsize=buttonTextSize)
+                    screen.draw.text(f"You got a {medalText.title()} MEDAL, Nice!", center=(WIDTH // 2, (HEIGHT // 5) * 2), shadow=(titleTextShadow), fontsize=buttonTextSize - 16)
                 screen.draw.text(f"{hero.points} points!", center=(WIDTH // 2, (HEIGHT // 5) * 2.6), shadow=(titleTextShadow), fontsize=buttonTextSize)
 
                 screen.draw.filled_rect(quitButton, (230, 80, 80))
                 screen.draw.text("Quit", center=(quitButton.center), shadow=buttonTextShadow, fontsize=buttonTextSize)
-                
-
-
-
 
 def update(): #process
     global game_state, heroVerticalVelocity
@@ -378,6 +380,12 @@ def update(): #process
 
         #** game match
         case "game":
+            #hero jumping
+            if floor(heroVerticalVelocity) < 0: #floating
+                hero.image = characterTiles["hero_0"]
+            elif floor(heroVerticalVelocity) > 0:
+                hero.image = characterTiles["hero_1"]
+
             #* movement
             if keyboard.right:
                 hero.x += heroMovementVelocity
@@ -437,7 +445,7 @@ def update(): #process
                         npc.speed = 1.5
                         wasTired = True
 
-                    if npc.direction != lastDirection and wasTired: print(f"{npc.image} changed direction to: {npc.direction}, at speed {npc.speed}{", and was tired out!" if wasTired else ""}")
+                    if npc.direction != lastDirection and wasTired: print(f"[DEBUG] {npc.image} changed direction to: {npc.direction}, at speed {npc.speed}{", and was tired out!" if wasTired else ""}")
     
             heroLifesBefore = hero.lifes
             wasHit = False
@@ -457,18 +465,19 @@ def update(): #process
                                 hero.lifes -= 1
                                 changeHeroInvicibility(True)
                                 wasHit = True
+                                print("[INFO] player hit, -1 life")
                     elif 'friend' in npc.image:
                         soundEffects["heal"].play()
                         hero.lifes += 1 if hero.lifes + 1 <= 5 else 0
                         NPCs.remove(npc)
-                        print('friend met!')
+                        print('[INFO] friend met, +1 life!')
 
             if heroLifesBefore > hero.lifes:
                 changeHeroInvicibility(True)
 
             #game ending
             if hero.lifes <= 0:
-                print("died!")
+                print("[INFO] died, end of game")
                 game_state = "end"
             
         #** game ending
@@ -489,15 +498,19 @@ def on_key_down(key):
                 currentVolume += 0.1
                 currentVolume = currentVolume
                 music.set_volume(currentVolume)
-                for sfx in soundEffects.values():
+                for key, sfx in soundEffects.items():
                     sfx.set_volume(currentVolume)
+                    if key == "jump":
+                        sfx.set_volume(max(floor((currentVolume - 0.1) * 10)/10, 0))
         case keys.PAGEDOWN:
             if currentVolume - 0.1 >= 0.0:
                 currentVolume -= 0.1
                 currentVolume = currentVolume
                 music.set_volume(currentVolume)
-                for sfx in soundEffects.values():
+                for key, sfx in soundEffects.items():
                     sfx.set_volume(currentVolume)
+                    if key == "jump":
+                        sfx.set_volume(max(floor((currentVolume - 0.1) * 10)/10, 0))
 
 #Clicks
 volumeBeforeMute: int
@@ -509,24 +522,28 @@ def on_mouse_down(pos):
         case "menu":
             if soundButton.collidepoint(pos):
                 if currentVolume > 0: 
-                    print("mute")
+                    print("[INFO] muted")
                     volumeBeforeMute = currentVolume
                     currentVolume = 0
                 else: 
-                    print("mute")
+                    print("[INFO] unmuted")
                     currentVolume = volumeBeforeMute
 
                 music.set_volume(currentVolume)
                 for sfx in soundEffects.values():
                     sfx.set_volume(currentVolume)
             
+            #* init gameplay
             elif startButton.collidepoint(pos):
                 game_state = "game"
+                clock.schedule_unique(changeHeroInvicibility, 1.5)
                 music.play("match")
                 scheduleCharacterSpawnings()
                 scheduleCharacterAnimations()
+
             elif quitButton.collidepoint(pos):
                 exit()
+
             elif helpButton.collidepoint(pos):
                 drawHelpText = not drawHelpText
         case "end":
