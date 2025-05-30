@@ -20,7 +20,7 @@ BG_COLORS = {
     "end": (4, 5, 60),
 }
 #music
-currentVolume = 0.2     #TODO: change default
+currentVolume = 0.2
 music.set_volume(currentVolume)
 music.play("menu") #menu, initial theme
 
@@ -126,8 +126,8 @@ for topPosition in range(GROUND_HEIGHT, HEIGHT):
 
 hero = Actor(characterTiles["hero_0"])
 hero.topleft: tuple = (WIDTH // 2, GROUND_HEIGHT - 30)
-hero.lifes: int = 3     #TODO: change default
-hero.points: int = 0    #20: bronze, 50: silver, 100: gold!, 150: platinum!
+hero.lifes: int = 3
+hero.points: int = 0  #? more points, better medals!
 hero.invincible: bool = True
 
 NPCs: list['Actor'] = []
@@ -351,8 +351,12 @@ def draw(): #place in screen
                 screen.draw.text("lifes: " + str(hero.lifes), (WIDTH - WIDTH // 4.5, 30), shadow=(0.8, 0.5))
                 screen.draw.text("POINTS: " + str(hero.points), (WIDTH - WIDTH // 4.5, 60), shadow=(0.8, 0.5))
             else:
-                ... 
-                #TODO: draw lifes, points
+                screen.draw.text(f"Lifes: {hero.lifes}", (0, 20), shadow=buttonTextShadow) #draw hearts for every life
+                screen.draw.text(f"Points: {hero.points}", (0, 40), shadow=buttonTextShadow)
+
+                if hero.invincible:
+                    screen.draw.text(f"Invincible", center=(WIDTH // 2, (HEIGHT // 4)), shadow=debugTextShadow, color=(255, 248, 73))
+
 
         #** game ending
         case "end": 
@@ -364,7 +368,7 @@ def draw(): #place in screen
                         medalText = str(medal)
 
                 if medalText:
-                    screen.draw.text(f"You got a {medalText.title()} MEDAL, Nice!", center=(WIDTH // 2, (HEIGHT // 5) * 2), shadow=(titleTextShadow), fontsize=buttonTextSize - 16)
+                    screen.draw.text(f"You got a {medalText.title()} MEDAL, Nice!", center=(WIDTH // 2, (HEIGHT // 5) * 2), shadow=(titleTextShadow), fontsize=buttonTextSize - 18)
                 screen.draw.text(f"{hero.points} points!", center=(WIDTH // 2, (HEIGHT // 5) * 2.6), shadow=(titleTextShadow), fontsize=buttonTextSize)
 
                 screen.draw.filled_rect(quitButton, (230, 80, 80))
@@ -458,6 +462,8 @@ def update(): #process
                             soundEffects["kill"].play()
                             NPCs.remove(npc)
                             hero.points += 1
+                            if npc.speed >= 6:
+                                hero.points += 2 #? maybe create a different sprite for the fast enemy
                         else:  
                             #side collision: hurts
                             if not wasHit and not hero.invincible: #invencibility frames
@@ -468,7 +474,8 @@ def update(): #process
                                 print("[INFO] player hit, -1 life")
                     elif 'friend' in npc.image:
                         soundEffects["heal"].play()
-                        hero.lifes += 1 if hero.lifes + 1 <= 5 else 0
+                        hero.lifes += 1 if hero.lifes < 3 else 0
+                        hero.points += 1
                         NPCs.remove(npc)
                         print('[INFO] friend met, +1 life!')
 
