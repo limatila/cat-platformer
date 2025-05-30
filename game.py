@@ -92,12 +92,12 @@ helpButton.center   = (WIDTH // 2, (HEIGHT // 5) * 3.5)
 
 #text defaults
 drawHelpText = False
-helpTexts = ["Esc to quit", "Page Up increase volume", "Page Down decrease volume", "Up to jump", "Down to fall down", "Left and Right to move",
-                             "The objective is get the most points possible, killing ENEMYs,",
-                             "You kill enemys by jumping in their heads,",
-                             "You can take DAMAGE, and will HEAL with Blue FRIENDs,",
+helpTexts = ["Esc to QUIT", "Page Up to + Volume", "Page Down to- Volume", "Up to Jump", "Down to Fall", "Left and Right to move",
+                             "The objective is get the most points killing ENEMYs,",
+                             "Kill ENEMYs by jumping in their heads,",
+                             "Blue FRIENDs heal, and ENEMYs do damage,",
                              "The game ends after you lose all LIFES",
-                             "You'll win medals for the most POINTs you get!"]
+                             "Play well and win MEDALs!"]
 buttonTextSize = 50
 
 buttonTextShadow = (0.3, 0.3)
@@ -247,11 +247,12 @@ def alternateNPCPoses():
         npc.image = characterTiles[next(npc.frameGenerator)]
 
 #Actions and more
+def generateNPCHitbox(npc, size: int = 8) -> Rect:
+    return Rect(npc.left - 8, npc.top - 8,  #leftop
+                npc.width + (size*2), 8)    #width, height
+
 def isTopCollision(npc: 'Actor', size: int = 8) -> bool:
-    hitbox = Rect(
-        npc.left - 8, npc.top - 4, 
-        npc.width + (size*2), 8
-    )
+    hitbox = generateNPCHitbox(npc, size)
     return hero.colliderect(hitbox) and heroVerticalVelocity > 0 #check if it's falling
 
 def changeHeroInvicibility(changeTo: bool = False):
@@ -312,14 +313,7 @@ def draw(): #place in screen
             screen.draw.text("Help", center=(helpButton.center), shadow=buttonTextShadow, fontsize=buttonTextSize)
 
             if drawHelpText:
-                # drawY = HEIGHT - 18
                 drawY = HEIGHT // 5 * 3
-                # for text in helpTexts:
-                #     if text.startswith("The objective"):
-                #         drawY = HEIGHT - 18
-                #         drawX = WIDTH // 6 * 3
-                #     screen.draw.text(str(text), (drawX, drawY), shadow=(titleTextShadow))
-                #     drawY -= 16
                 for text in helpTexts:
                     if text.startswith("The objective"): drawY += 16
                     screen.draw.text(str(text), (0, drawY), shadow=titleTextShadow)
@@ -338,10 +332,7 @@ def draw(): #place in screen
                 npc.draw()
                 
                 if DEBUG:
-                    hitbox = Rect(
-                        npc.left - 8, npc.top - 4, 
-                        npc.width + 16, 8
-                    )
+                    hitbox = generateNPCHitbox(npc)
                     screen.draw.rect(hitbox, (200, 0, 0))
             
             if DEBUG:
@@ -367,7 +358,7 @@ def draw(): #place in screen
                         medalText = str(medal)
 
                 if medalText:
-                    screen.draw.text(f"You got a {medalText.title()} medal!", center=(WIDTH // 2, (HEIGHT // 5) * 2), shadow=(titleTextShadow), fontsize=buttonTextSize)
+                    screen.draw.text(f"You got a {medalText.title()} MEDAL, Nice!", center=(WIDTH // 2, (HEIGHT // 5) * 2), shadow=(titleTextShadow), fontsize=buttonTextSize)
                 screen.draw.text(f"{hero.points} points!", center=(WIDTH // 2, (HEIGHT // 5) * 2.6), shadow=(titleTextShadow), fontsize=buttonTextSize)
 
                 screen.draw.filled_rect(quitButton, (230, 80, 80))
@@ -455,7 +446,7 @@ def update(): #process
                 if hero.colliderect(npc):
                     if 'enemy' in npc.image:
                         #collision at top: kills
-                        if isTopCollision(npc, size=10):
+                        if isTopCollision(npc):
                             soundEffects["kill"].play()
                             NPCs.remove(npc)
                             hero.points += 1
