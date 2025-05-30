@@ -17,10 +17,10 @@ game_state: str = "menu" #menu | game | end
 BG_COLORS = {
     "menu": (96, 125, 242),
     "game": (147, 246, 255),
-    "end": (255, 255, 255),
+    "end": (4, 5, 60),
 }
 #music
-currentVolume = 0.3     #! change later
+currentVolume = 0.3     #TODO: change default
 music.set_volume(currentVolume)
 music.play("menu") #menu, initial theme
 
@@ -77,7 +77,7 @@ buttonDefaultSizes = (
     0,#left
     0,#top
     200,#width
-    70#height
+    65#height
 )
 quitButton = Rect(buttonDefaultSizes)
 startButton = Rect(buttonDefaultSizes)
@@ -86,17 +86,46 @@ soundButton = Actor(soundTiles[True])
 
 #positions
 soundButton.topleft = (WIDTH - 80, 50)
-startButton.center  = ((WIDTH // 2) - 120, (HEIGHT // 5) * 3)
-quitButton.center   = ((WIDTH // 2) + 120, (HEIGHT // 5) * 3) 
-helpButton.center   = (WIDTH // 2, (HEIGHT // 5) * 4) 
+startButton.center  = ((WIDTH // 2) - 120, (HEIGHT // 5) * 2.5)
+quitButton.center   = ((WIDTH // 2) + 120, (HEIGHT // 5) * 2.5) 
+helpButton.center   = (WIDTH // 2, (HEIGHT // 5) * 3.5) 
 
-defaultShadow = (0.5, 0.5) #shadow= arg
+#text defaults
+drawHelpText = False
+helpTexts = ["Esc to quit", "Page Up increase volume", "Page Down decrease volume", "Up to jump", "Down to fall down", "Left and Right to move",
+                             "The objective is get the most points possible, killing ENEMYs,",
+                             "You kill enemys by jumping in their heads,",
+                             "You can take DAMAGE, and will HEAL with Blue FRIENDs,",
+                             "The game ends after you lose all LIFES",
+                             "You'll win medals for the most POINTs you get!"]
+buttonTextSize = 50
+
+buttonTextShadow = (0.3, 0.3)
+titleTextShadow = (0.6, 0.6)
+debugTextShadow = (0.5, 0.5) #shadow= arg
 
 #*game initial states
+groundsToDraw: list['Actor'] = []
+#drawing grass
+for leftPosition in range(WIDTH):
+    if leftPosition % 18 == 0: #every 10 pixels?
+        newDirt = Actor(sceneTiles["dirtConnected"])
+        newDirt.topleft = (leftPosition, GROUND_HEIGHT)
+        groundsToDraw.append(newDirt)
+
+#drawing ground bellow
+for topPosition in range(GROUND_HEIGHT, HEIGHT):
+    if topPosition % 18 == 0:
+        for leftPosition in range(WIDTH):
+            if leftPosition % 18 == 0: #every 10 pixels?
+                newMud = Actor(sceneTiles["mudConnected"])
+                newMud.topleft = (leftPosition, topPosition)
+                groundsToDraw.append(newMud)
+
 hero = Actor(characterTiles["hero_0"])
 hero.topleft: tuple = (WIDTH // 2, GROUND_HEIGHT - 30)
-hero.lifes: int = 5
-hero.points: int = 0    #? 20: bronze, 50: silver, 100: gold!, 150: platinum!
+hero.lifes: int = 1     #TODO: change default
+hero.points: int = 0    #20: bronze, 50: silver, 100: gold!, 150: platinum!
 hero.invincible: bool = False
 
 NPCs: list['Actor'] = []
@@ -121,6 +150,17 @@ harderScoresSchedules: dict[int, bool] = {
     100: False,
     200: False,
 }
+scoreMedals: dict[int, str] = {
+    10: "honorable mention",
+    20: "bronze",
+    50: "silver",
+    100: "gold",
+    150: "platinum",
+    200: "ok you need to stop."
+}
+
+#* end menu
+
 
 #* Actions & Main
 #npc generation
@@ -209,8 +249,8 @@ def alternateNPCPoses():
 #Actions and more
 def isTopCollision(npc: 'Actor', size: int = 8) -> bool:
     hitbox = Rect(
-        npc.left - size, npc.top - 6, 
-        npc.width + (size*2), 6
+        npc.left - 8, npc.top - 4, 
+        npc.width + (size*2), 8
     )
     return hero.colliderect(hitbox) and heroVerticalVelocity > 0 #check if it's falling
 
@@ -265,27 +305,31 @@ def draw(): #place in screen
             soundButton.draw()
 
             #text
+            screen.draw.text(str(TITLE), center=(WIDTH // 2, (HEIGHT // 5) * 1), shadow=(titleTextShadow), fontsize=buttonTextSize + 32)
 
+            screen.draw.text("Start", center=(startButton.center), shadow=buttonTextShadow, fontsize=buttonTextSize)
+            screen.draw.text("Quit", center=(quitButton.center), shadow=buttonTextShadow, fontsize=buttonTextSize)
+            screen.draw.text("Help", center=(helpButton.center), shadow=buttonTextShadow, fontsize=buttonTextSize)
+
+            if drawHelpText:
+                # drawY = HEIGHT - 18
+                drawY = HEIGHT // 5 * 3
+                # for text in helpTexts:
+                #     if text.startswith("The objective"):
+                #         drawY = HEIGHT - 18
+                #         drawX = WIDTH // 6 * 3
+                #     screen.draw.text(str(text), (drawX, drawY), shadow=(titleTextShadow))
+                #     drawY -= 16
+                for text in helpTexts:
+                    if text.startswith("The objective"): drawY += 16
+                    screen.draw.text(str(text), (0, drawY), shadow=titleTextShadow)
+                    drawY += 16
             
 
         #** game match
         case "game": 
-            #drawing grass
-            for leftPosition in range(WIDTH):
-                if leftPosition % 18 == 0: #every 10 pixels?
-                    newDirt = Actor(sceneTiles["dirtConnected"])
-                    newDirt.topleft = (leftPosition, GROUND_HEIGHT)
-                    newDirt.draw()
-
-            #drawing ground bellow
-            initialTopPosition: int = GROUND_HEIGHT #positioning bellow grass
-            for topPosition in range(initialTopPosition, HEIGHT):
-                if topPosition % 18 == 0:
-                    for leftPosition in range(WIDTH):
-                        if leftPosition % 18 == 0: #every 10 pixels?
-                            newDirt = Actor(sceneTiles["mudConnected"])
-                            newDirt.topleft = (leftPosition, topPosition)
-                            newDirt.draw()
+            for ground in groundsToDraw:
+                ground.draw()
 
             #drawing characters/objects
             hero.draw()
@@ -296,25 +340,45 @@ def draw(): #place in screen
                 if DEBUG:
                     hitbox = Rect(
                         npc.left - 8, npc.top - 4, 
-                        npc.width + 16, 4
+                        npc.width + 16, 8
                     )
                     screen.draw.rect(hitbox, (200, 0, 0))
             
             if DEBUG:
-                screen.draw.text("y: " + str(hero.y), (0,0), shadow=defaultShadow)
-                screen.draw.text("v: " + str(heroVerticalVelocity), (0,15), shadow=defaultShadow)
-                screen.draw.text("NPC count: " + str(len(NPCs)), (0,30), shadow=defaultShadow)
-                screen.draw.text("volume: " + str(round(currentVolume*10)), (0,60), shadow=defaultShadow)
+                screen.draw.text("y: " + str(hero.y), (0,0), shadow=debugTextShadow)
+                screen.draw.text("v: " + str(heroVerticalVelocity), (0,15), shadow=debugTextShadow)
+                screen.draw.text("NPC count: " + str(len(NPCs)), (0,30), shadow=debugTextShadow)
+                screen.draw.text("volume: " + str(round(currentVolume*10)), (0,60), shadow=debugTextShadow)
 
                 screen.draw.text("invincible: " + str(hero.invincible), (WIDTH - WIDTH // 4.5, 0), shadow=(0.8, 0.5))
                 screen.draw.text("lifes: " + str(hero.lifes), (WIDTH - WIDTH // 4.5, 30), shadow=(0.8, 0.5))
                 screen.draw.text("POINTS: " + str(hero.points), (WIDTH - WIDTH // 4.5, 60), shadow=(0.8, 0.5))
+            else:
+                ... 
+                #TODO: draw lifes, points
 
         #** game ending
-        case "end": ...
+        case "end": 
+                screen.draw.text("Game Over", center=(WIDTH // 2, (HEIGHT // 5) * 1), shadow=(titleTextShadow), fontsize=buttonTextSize + 32, color=(234, 78, 60))
+
+                medalText: str = None
+                for score, medal in scoreMedals.items():
+                    if hero.points >= score:
+                        medalText = str(medal)
+
+                if medalText:
+                    screen.draw.text(f"You got a {medalText.title()} medal!", center=(WIDTH // 2, (HEIGHT // 5) * 2), shadow=(titleTextShadow), fontsize=buttonTextSize)
+                screen.draw.text(f"{hero.points} points!", center=(WIDTH // 2, (HEIGHT // 5) * 2.6), shadow=(titleTextShadow), fontsize=buttonTextSize)
+
+                screen.draw.filled_rect(quitButton, (230, 80, 80))
+                screen.draw.text("Quit", center=(quitButton.center), shadow=buttonTextShadow, fontsize=buttonTextSize)
+                
+
+
+
 
 def update(): #process
-    global heroVerticalVelocity
+    global game_state, heroVerticalVelocity
 
     match(game_state):
         #** game menu
@@ -382,7 +446,7 @@ def update(): #process
                         npc.speed = 1.5
                         wasTired = True
 
-                    # if not npc.direction == lastDirection: print(f"{npc.image} changed direction to: {npc.direction}, at speed {npc.speed}{", and was tired out!" if wasTired else ""}")
+                    if npc.direction != lastDirection and wasTired: print(f"{npc.image} changed direction to: {npc.direction}, at speed {npc.speed}{", and was tired out!" if wasTired else ""}")
     
             heroLifesBefore = hero.lifes
             wasHit = False
@@ -404,7 +468,7 @@ def update(): #process
                                 wasHit = True
                     elif 'friend' in npc.image:
                         soundEffects["heal"].play()
-                        hero.lifes += 1 if hero.lifes+1 <= 5 else 0
+                        hero.lifes += 1 if hero.lifes + 1 <= 5 else 0
                         NPCs.remove(npc)
                         print('friend met!')
 
@@ -414,9 +478,11 @@ def update(): #process
             #game ending
             if hero.lifes <= 0:
                 print("died!")
+                game_state = "end"
             
         #** game ending
-        case "end": ...
+        case "end": 
+            quitButton.center = helpButton.center
 
 #more bindings
 def on_key_down(key):
@@ -442,22 +508,40 @@ def on_key_down(key):
                 for sfx in soundEffects.values():
                     sfx.set_volume(currentVolume)
 
+#Clicks
 volumeBeforeMute: int
 def on_mouse_down(pos):
-    global currentVolume, volumeBeforeMute
+    global game_state, currentVolume, volumeBeforeMute, drawHelpText
 
     #sound button - mute/unmute
-    if soundButton.collidepoint(pos):
-        if currentVolume > 0: 
-            print("mute")
-            volumeBeforeMute = currentVolume
-            currentVolume = 0
-        else: 
-            print("mute")
-            currentVolume = volumeBeforeMute
+    match(game_state):
+        case "menu":
+            if soundButton.collidepoint(pos):
+                if currentVolume > 0: 
+                    print("mute")
+                    volumeBeforeMute = currentVolume
+                    currentVolume = 0
+                else: 
+                    print("mute")
+                    currentVolume = volumeBeforeMute
 
-        music.set_volume(currentVolume)
-        for sfx in soundEffects.values():
-            sfx.set_volume(currentVolume)
+                music.set_volume(currentVolume)
+                for sfx in soundEffects.values():
+                    sfx.set_volume(currentVolume)
+            
+            elif startButton.collidepoint(pos):
+                game_state = "game"
+                music.play("match")
+                scheduleCharacterSpawnings()
+                scheduleCharacterAnimations()
+            elif quitButton.collidepoint(pos):
+                exit()
+            elif helpButton.collidepoint(pos):
+                drawHelpText = not drawHelpText
+        case "end":
+            if quitButton.collidepoint(pos):
+                exit()
+            #? elif retry ???
+    
 
 pgzrun.go()
