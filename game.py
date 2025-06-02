@@ -6,8 +6,6 @@ import pgzrun
 
 from pygame import Rect #for enemy hitboxes
 from pygame.mixer import Sound #! necessário, ou os sons de Sfx ficariam muito altos.
-import pygame #! linhas usando 'music', compatível com pgzero, estão pedindo pelo init do pygame.
-pygame.init()
 
 DEBUG = False #show debug text ingame
 

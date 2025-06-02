@@ -6,7 +6,7 @@ In midst of it, there are several good aliens that want to defend the earth, so 
 # How to play
 ### Installing
 ```bash
-pip install pgzero
+pip install pgzero (ALWAYS AS ADMIN PRIVILEGE)
 
 python game.py
 
