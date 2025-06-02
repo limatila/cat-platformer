@@ -6,6 +6,8 @@ import pgzrun
 
 from pygame import Rect #for enemy hitboxes
 from pygame.mixer import Sound #! necessário, ou os sons de Sfx ficariam muito altos.
+import pygame #! linhas usando 'music', compatível com pgzero, estão pedindo pelo init do pygame.
+pygame.init()
 
 DEBUG = False #show debug text ingame
 
@@ -31,11 +33,7 @@ TOP_GROUND_HEIGHT: int = GROUND_HEIGHT - 12
 
 # including used images
 sceneTiles: dict = {
-    "dirt": "tile_0000",
     "dirtConnected": "tile_0002",
-    "grass": "tile_0016",
-    "grassConnected": "tile_0018",
-    "mud": "tile_0040",
     "mudConnected": "tile_0104"
 }
 characterTiles: dict = {
